@@ -1,1 +1,61 @@
+name: Construire IR PRO
 
+on:
+  push:
+    paths:
+      - "irpro.zip"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperer les fichiers
+        uses: actions/checkout@v4
+
+      - name: Decompresser le projet
+        run: unzip -o irpro.zip -d project
+
+      - name: Installer Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Installer Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Cle de signature
+        env:
+          KS: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > project/app/release.jks
+            echo "Cle trouvee"
+          else
+            echo "::warning::Pas de cle KEYSTORE_B64"
+          fi
+
+      - name: Compiler l'appli
+        working-directory: project
+        env:
+          KS_PASS: streamly2026
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Preparer le fichier
+        run: cp project/app/build/outputs/apk/release/app-release.apk irpro.apk
+
+      - name: Publier le fichier .apk
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: IR PRO (derniere version)
+          body: "Version ${{ github.run_number }}"
+          files: irpro.apk
+          make_latest: true
